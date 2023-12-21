@@ -32,9 +32,26 @@ def StripColons(deps):
 def IsSourceFile(name):
   return name.endswith(".c") or name.endswith(".cc")
 
-class BuildFileFunctions(object):
+class BuildFileFunctions(Mapping):
   def __init__(self, converter):
     self.converter = converter
+    self.kv={}
+  def __len__(self):
+    return 1
+  def __getitem__(self,k):
+    v=getattr(self,k,None)
+    if v!=None:
+        return v
+    if k in self.kv:
+     return self.kv[k]
+    else:
+     def ff(*arg,**kargs):
+         pass
+     return ff
+  def __setitem__(self,k,v):
+     self.kv[k]=v
+  def __iter__(self):
+     return iter([])
 
   def _add_deps(self, kwargs, keyword=""):
     if "deps" not in kwargs:
@@ -263,24 +280,9 @@ def GetDict(obj):
   return ret
 
 globs = GetDict(converter)
-class Dummy(Mapping):
-        def __init__(self):
-            self.kv={}
-        def __len__(self):
-            return 1
-        def __getitem__(self,k):
-            if k in self.kv:
-                return self.kv[k]
-            else:
-                def ff(*arg,**kargs):
-                    pass
-                return ff
-        def __setitem__(self,k,v):
-            self.kv[k]=v
-        def __iter__(self):
-            return iter([])
-dummy=Dummy()
-exec(open("BUILD").read(),GetDict(BuildFileFunctions(converter)),dummy)
+dummy=BuildFileFunctions(converter)
+exec(open("internal/BUILD").read(),GetDict(dummy),dummy)
+exec(open("BUILD").read(),GetDict(dummy),dummy)
 #execfile("WORKSPACE", GetDict(WorkspaceFileFunctions(converter)))
 #execfile("BUILD", GetDict(BuildFileFunctions(converter)))
 
