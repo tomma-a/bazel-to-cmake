@@ -22,12 +22,29 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 from collections.abc import Mapping
+from argparse import ArgumentParser
+import os
 
 import sys
 import textwrap
 
+path_prefix=""
+strip_prefixes=[]
+
+Trans_Func=None
+def is_c_cplusplus_file(name):
+    return name.endswith(".c") or name.endswith(".cc") or name.endswith(".h") or name.endswith(".cpp") or name.endswith(".hpp")
+def path_map(name):
+    if len(path_prefix)>0 and is_c_cplusplus_file(name):
+       return os.path.join(path_prefix,name) 
+    else:
+       return name
 def StripColons(deps):
-  return map(lambda x: x[1:], deps)
+    return map(lambda x: x[1:] if x[0]==':' else x, deps)
+def Strip_Prefix(deps):
+    for ss in strip_prefixes:
+        deps=map(lambda x: x[x.startswith(ss) and len(ss):],deps)
+    return deps
 
 def IsSourceFile(name):
   return name.endswith(".c") or name.endswith(".cc")
@@ -56,10 +73,14 @@ class BuildFileFunctions(Mapping):
   def _add_deps(self, kwargs, keyword=""):
     if "deps" not in kwargs:
       return
+    deps=StripColons(kwargs["deps"])
+    deps=Strip_Prefix(deps)
+    if Trans_Func !=None:
+        deps=Trans_Func(deps)
     self.converter.toplevel += "target_link_libraries(%s%s\n  %s)\n" % (
         kwargs["name"],
         keyword,
-        "\n  ".join(StripColons(kwargs["deps"]))
+        "\n  ".join(deps)
     )
 
   def load(self, *args):
@@ -69,7 +90,7 @@ class BuildFileFunctions(Mapping):
     if kwargs["name"] == "amalgamation" or kwargs["name"] == "upbc_generator":
       return
     files = kwargs.get("srcs", []) + kwargs.get("hdrs", [])
-
+    files=map(path_map,files)
     if filter(IsSourceFile, files):
       # Has sources, make this a normal library.
       self.converter.toplevel += "add_library(%s\n  %s)\n" % (
@@ -281,10 +302,31 @@ def GetDict(obj):
 
 globs = GetDict(converter)
 dummy=BuildFileFunctions(converter)
-exec(open("internal/BUILD").read(),GetDict(dummy),dummy)
-exec(open("BUILD").read(),GetDict(dummy),dummy)
+default_output="CMakeLists.txt"
+parser = ArgumentParser(prog="bazel2cmake",description='bazel to cmake converter')
+parser.add_argument("files",nargs='+')
+parser.add_argument("-s","--strip",nargs='*',help="strip prefix")
+parser.add_argument("-t","--trans",default="",help="trans python filename")
+parser.add_argument("-o","--output",default=default_output,help="cmake output default to CMakeLists.txt")
+#exec(open("internal/BUILD").read(),GetDict(dummy),dummy)
+#exec(open("BUILD").read(),GetDict(dummy),dummy)
 #execfile("WORKSPACE", GetDict(WorkspaceFileFunctions(converter)))
 #execfile("BUILD", GetDict(BuildFileFunctions(converter)))
+args=parser.parse_args()
+default_output=args.output
+strip_prefixes =args.strip
+trans_filename=args.trans;
 
-with open(sys.argv[1], "w") as f:
+if len(trans_filename)>0 and os.path.isfile(trans_filename) and trans_filename.endswith(".py"):
+    trans_filename=trans_filename[:len(trans_filename)-3]
+    trans_m=__import__(trans_filename)
+    Trans_Func=getattr(trans_m,"trans",None)
+
+for fname in args.files:
+    if not os.path.isfile(fname):
+        print(f"File {fname} doesn't exist!")
+        continue
+    path_prefix=os.path.dirname(fname)
+    exec(open(fname).read(),GetDict(dummy),dummy)
+with open(default_output, "w") as f:
   f.write(converter.convert())
