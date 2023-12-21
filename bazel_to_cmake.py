@@ -21,6 +21,7 @@ See README.md for more information.
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+from collections.abc import Mapping
 
 import sys
 import textwrap
@@ -262,9 +263,26 @@ def GetDict(obj):
   return ret
 
 globs = GetDict(converter)
-
-execfile("WORKSPACE", GetDict(WorkspaceFileFunctions(converter)))
-execfile("BUILD", GetDict(BuildFileFunctions(converter)))
+class Dummy(Mapping):
+        def __init__(self):
+            self.kv={}
+        def __len__(self):
+            return 1
+        def __getitem__(self,k):
+            if k in self.kv:
+                return self.kv[k]
+            else:
+                def ff(*arg,**kargs):
+                    pass
+                return ff
+        def __setitem__(self,k,v):
+            self.kv[k]=v
+        def __iter__(self):
+            return iter([])
+dummy=Dummy()
+exec(open("BUILD").read(),GetDict(BuildFileFunctions(converter)),dummy)
+#execfile("WORKSPACE", GetDict(WorkspaceFileFunctions(converter)))
+#execfile("BUILD", GetDict(BuildFileFunctions(converter)))
 
 with open(sys.argv[1], "w") as f:
   f.write(converter.convert())
