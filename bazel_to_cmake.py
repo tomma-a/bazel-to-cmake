@@ -30,10 +30,10 @@ import textwrap
 
 path_prefix=""
 strip_prefixes=[]
-
+skip_targets=[]
 Trans_Func=None
 def is_c_cplusplus_file(name):
-    return name.endswith(".c") or name.endswith(".cc") or name.endswith(".h") or name.endswith(".cpp") or name.endswith(".hpp")
+    return name.endswith(".c") or name.endswith(".cc") or name.endswith(".h") or name.endswith(".cpp") or name.endswith(".hpp") or name.endswith(".s") or name.endswith(".S")
 def path_map(name):
     if len(path_prefix)>0 and is_c_cplusplus_file(name):
        return os.path.join(path_prefix,name) 
@@ -88,6 +88,8 @@ class BuildFileFunctions(Mapping):
 
   def cc_library(self, **kwargs):
     if kwargs["name"] == "amalgamation" or kwargs["name"] == "upbc_generator":
+      return
+    if kwargs["name"] in skip_targets:
       return
     files = kwargs.get("srcs", []) + kwargs.get("hdrs", [])
     files=map(path_map,files)
@@ -218,6 +220,7 @@ class Converter(object):
     self.prelude = ""
     self.toplevel = ""
     self.if_lua = ""
+    self.project=""
 
   def convert(self):
     return self.template % {
@@ -229,15 +232,7 @@ class Converter(object):
     # This file was generated from BUILD using tools/make_cmakelists.py.
 
     cmake_minimum_required(VERSION 3.1)
-
-    if(${CMAKE_VERSION} VERSION_LESS 3.12)
-        cmake_policy(VERSION ${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION})
-    else()
-        cmake_policy(VERSION 3.12)
-    endif()
-
-    cmake_minimum_required (VERSION 3.0)
-    cmake_policy(SET CMP0048 NEW)
+    %(project)s
 
     %(prelude)s
 
@@ -306,6 +301,8 @@ default_output="CMakeLists.txt"
 parser = ArgumentParser(prog="bazel2cmake",description='bazel to cmake converter')
 parser.add_argument("files",nargs='+')
 parser.add_argument("-s","--strip",nargs='*',help="strip prefix")
+parser.add_argument("-p","--project",default="",help="project name")
+parser.add_argument("-i","--ignore",nargs='*',default=skip_targets,help="ignore bazel target")
 parser.add_argument("-t","--trans",default="",help="trans python filename")
 parser.add_argument("-o","--output",default=default_output,help="cmake output default to CMakeLists.txt")
 #exec(open("internal/BUILD").read(),GetDict(dummy),dummy)
@@ -316,6 +313,7 @@ args=parser.parse_args()
 default_output=args.output
 strip_prefixes =args.strip
 trans_filename=args.trans;
+skip_targets=args.ignore
 
 if len(trans_filename)>0 and os.path.isfile(trans_filename) and trans_filename.endswith(".py"):
     trans_filename=trans_filename[:len(trans_filename)-3]

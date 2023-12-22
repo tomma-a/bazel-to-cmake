@@ -5,8 +5,10 @@ def trans(deps):
             ss=i[len("@com_google_absl//"):]
             ii=ss.rfind(":")
             if ii>0:
-                ss=ss[0:ii]
-            ret.append(ss.replace("/","::"))
+                ss=ss[ii+1:]
+                ret.append("absl::"+ss)
+            else:
+                ret.append(ss.replace("/","::"))
         else:
             ret.append(i)
     return ret
